@@ -1,0 +1,83 @@
+# Aggiorna il dominio su richiesta: si avvia a mano (anche da cellulare) scrivendo il nuovo dominio.
+# Modifica main.json, extractor.js, Quick-Resume.md, incrementa la versione, fa commit e push.
+name: Aggiorna dominio
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_domain:
+        description: "Nuovo dominio, senza https:// (es. streamingcommunityz.nuovo)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Aggiorna dominio e versione
+        id: update
+        env:
+          NEW_DOMAIN: ${{ inputs.new_domain }}
+        run: node .github/scripts/update-domain.js "$NEW_DOMAIN"
+
+      # Test sul sito vero. Non blocca il push: Cloudflare a volte blocca i server di GitHub.
+      - name: Test live del modulo
+        id: test
+        continue-on-error: true
+        run: |
+          node test-module.js "frieren"
+          node test-module.js "one piece"
+
+      - name: Commit e push
+        env:
+          NEW_DOMAIN: ${{ steps.update.outputs.new_domain }}
+          NEW_VERSION: ${{ steps.update.outputs.new_version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.json extractor.js Quick-Resume.md
+          git commit -m "Update domain to $NEW_DOMAIN - v$NEW_VERSION"
+          git push
+
+      - name: Chiudi issue di avviso
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_DOMAIN: ${{ steps.update.outputs.new_domain }}
+          NEW_VERSION: ${{ steps.update.outputs.new_version }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        run: |
+          if [ "$TEST_OUTCOME" = "success" ]; then
+            TEST_MSG="✅ Test live superati."
+          else
+            TEST_MSG="⚠️ Test live non superati (o bloccati da Cloudflare): prova il modulo su Shirox o lancia il test dal PC."
+          fi
+          for n in $(gh issue list --label dominio --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Dominio aggiornato a \`$NEW_DOMAIN\` (v$NEW_VERSION). $TEST_MSG"
+          done
+
+      - name: Riepilogo
+        env:
+          OLD_DOMAIN: ${{ steps.update.outputs.old_domain }}
+          NEW_DOMAIN: ${{ steps.update.outputs.new_domain }}
+          OLD_VERSION: ${{ steps.update.outputs.old_version }}
+          NEW_VERSION: ${{ steps.update.outputs.new_version }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        run: |
+          {
+            echo "## Dominio aggiornato"
+            echo "- \`$OLD_DOMAIN\` → \`$NEW_DOMAIN\`"
+            echo "- Versione \`$OLD_VERSION\` → \`$NEW_VERSION\`"
+            echo "- Test live: **$TEST_OUTCOME**"
+            echo ""
+            echo "Su Shirox: apri Moduli e aggiorna (la nuova versione forza il download)."
+          } >> "$GITHUB_STEP_SUMMARY"

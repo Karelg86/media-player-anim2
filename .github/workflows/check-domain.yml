@@ -1,0 +1,66 @@
+# Controlla ogni 6 ore se il dominio è cambiato.
+# NON modifica nessun file: se trova un cambio apre una issue di avviso (notifica su app GitHub / email).
+# Il cambio vero si fa con il workflow "Aggiorna dominio" (anche da cellulare).
+name: Controllo dominio
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Controlla dominio attuale
+        id: check
+        run: node .github/scripts/check-domain.js
+
+      - name: Apri issue di avviso
+        if: steps.check.outputs.alert == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD_DOMAIN: ${{ steps.check.outputs.old_domain }}
+          NEW_DOMAIN: ${{ steps.check.outputs.new_domain }}
+          REASON: ${{ steps.check.outputs.reason }}
+          UPDATE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/update-domain.yml
+        run: |
+          OPEN=$(gh issue list --label dominio --state open --json number --jq 'length')
+          if [ "$OPEN" != "0" ]; then
+            echo "Esiste già una issue di avviso aperta, non ne apro un'altra."
+            exit 0
+          fi
+          gh label create dominio --color D93F0B --description "Avviso cambio dominio" 2>/dev/null || true
+
+          SUGGESTED="${NEW_DOMAIN:-(da trovare a mano)}"
+          {
+            echo "## ⚠️ Possibile cambio dominio"
+            echo ""
+            echo "$REASON"
+            echo ""
+            echo "- Dominio attuale: \`$OLD_DOMAIN\`"
+            echo "- Nuovo dominio rilevato: \`$SUGGESTED\`"
+            echo ""
+            echo "### Cosa fare (anche da cellulare)"
+            echo "1. Apri: $UPDATE_URL"
+            echo "2. Premi **Run workflow**"
+            echo "3. Scrivi il nuovo dominio (es. \`$SUGGESTED\`) e conferma"
+            echo ""
+            echo "La issue si chiude da sola quando l'aggiornamento è fatto."
+          } > body.md
+
+          gh issue create \
+            --title "⚠️ Dominio cambiato? $OLD_DOMAIN -> $SUGGESTED" \
+            --body-file body.md \
+            --label dominio \
+            --assignee "${{ github.repository_owner }}"

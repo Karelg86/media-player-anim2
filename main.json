@@ -1,0 +1,21 @@
+{
+  "sourceName": "AnimeUnity IT",
+  "iconUrl": "https://www.animeunity.so/favicon.ico",
+  "author": {
+    "name": "Karelg86",
+    "icon": "https://github.com/Karelg86.png"
+  },
+  "version": "1.0.0",
+  "language": "Italian",
+  "streamType": "HLS",
+  "quality": "1080p",
+  "baseUrl": "https://www.animeunity.so/",
+  "searchBaseUrl": "https://www.animeunity.so/archivio?title=%s",
+  "scriptUrl": "https://raw.githubusercontent.com/Karelg86/media-player-anim2/main/extractor.js",
+  "type": "anime",
+  "asyncJS": true,
+  "supportsShirox": true,
+  "supportsMojuru": true,
+  "supportsSora": true,
+  "supportsLuna": true
+}

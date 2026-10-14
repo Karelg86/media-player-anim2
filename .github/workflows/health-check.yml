@@ -1,0 +1,97 @@
+# Controllo "salute" del modulo: una volta al giorno prova ricerca -> episodi -> stream sul sito vero.
+# Se fallisce 2 volte di fila apre una issue di avviso (il sito ha probabilmente cambiato struttura).
+# Quando torna a funzionare chiude la issue da solo. NON modifica nessun file.
+name: Salute modulo
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+env:
+  # Titoli usati per il test (uno breve, uno lungo)
+  TEST_1: "frieren"
+  TEST_2: "one piece"
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Test live del modulo
+        id: test
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            node test-module.js --mock
+            node test-module.js "$TEST_1"
+            node test-module.js "$TEST_2"
+          } 2>&1 | tee test-output.txt
+
+      - name: Gestisci avviso
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create salute --color FBCA04 --description "Avviso modulo non funzionante" 2>/dev/null || true
+          OPEN=$(gh issue list --label salute --state open --json number --jq '.[].number')
+
+          if [ "$TEST_OUTCOME" = "success" ]; then
+            for n in $OPEN; do
+              gh issue close "$n" --comment "✅ Il modulo è tornato a funzionare ($RUN_URL)."
+            done
+            exit 0
+          fi
+
+          # Fallito: avvisa solo se anche il controllo precedente era fallito (evita falsi allarmi Cloudflare)
+          PREV=$(gh run list --workflow health-check.yml --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')
+          echo "Esito controllo precedente: ${PREV:-nessuno}"
+          if [ "$PREV" != "failure" ]; then
+            echo "Primo errore: aspetto il prossimo controllo prima di avvisare."
+            exit 0
+          fi
+          if [ -n "$OPEN" ]; then
+            echo "Issue di avviso già aperta."
+            exit 0
+          fi
+
+          {
+            echo "## ⚠️ Il modulo non funziona da 2 controlli di fila"
+            echo ""
+            echo "Il test automatico (ricerca → episodi → stream) è fallito anche oggi."
+            echo "Il dominio risponde? Lo dice il robot **Controllo dominio**. Se il dominio è ok, probabilmente il sito ha cambiato la struttura delle pagine e il modulo va aggiornato."
+            echo ""
+            echo "Dettagli: $RUN_URL"
+            echo ""
+            echo "<details><summary>Ultime righe del test</summary>"
+            echo ""
+            echo '```'
+            tail -n 40 test-output.txt
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "La issue si chiude da sola quando il test torna a funzionare."
+          } > body.md
+
+          gh issue create \
+            --title "⚠️ Modulo non funzionante: test falliti 2 volte di fila" \
+            --body-file body.md \
+            --label salute \
+            --assignee "${{ github.repository_owner }}"
+
+      # Il run risulta rosso quando il test fallisce (serve anche per il confronto con il controllo successivo)
+      - name: Esito
+        if: steps.test.outcome != 'success'
+        run: exit 1
