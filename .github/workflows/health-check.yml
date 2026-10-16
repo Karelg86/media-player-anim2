@@ -28,23 +28,39 @@ jobs:
         with:
           node-version: "22"
 
+      # Exit code di test-module.js: 0 ok, 1 test falliti, 2 sito non raggiungibile dai server
+      # di GitHub (AnimeUnity/Cloudflare risponde 403 agli IP dei datacenter). Con 2 il controllo
+      # è "non verificabile": run verde con avviso, nessuna issue. Un 1 vince sempre.
       - name: Test live del modulo
         id: test
         continue-on-error: true
         run: |
           set -o pipefail
-          {
-            node test-module.js --mock
-            node test-module.js "$TEST_1"
-            node test-module.js "$TEST_2"
-          } 2>&1 | tee test-output.txt
+          failed=0
+          blocked=0
+          for t in --mock "$TEST_1" "$TEST_2"; do
+            code=0
+            node test-module.js "$t" 2>&1 | tee -a test-output.txt || code=$?
+            if [ "$code" = "2" ]; then blocked=1; elif [ "$code" != "0" ]; then failed=1; fi
+          done
+          if [ "$failed" = "1" ]; then exit 1; fi
+          if [ "$blocked" = "1" ]; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Sito non raggiungibile dai server di GitHub (blocco Cloudflare): modulo non verificabile oggi. Provare in locale con: node test-module.js \"$TEST_1\""
+          fi
 
       - name: Gestisci avviso
         env:
           GH_TOKEN: ${{ github.token }}
           TEST_OUTCOME: ${{ steps.test.outcome }}
+          TEST_BLOCKED: ${{ steps.test.outputs.blocked }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # Non verificabile: né apre né chiude issue (non sappiamo se il modulo funziona)
+          if [ "$TEST_BLOCKED" = "true" ]; then
+            echo "Sito non raggiungibile da GitHub: nessuna azione sulle issue."
+            exit 0
+          fi
           gh label create salute --color FBCA04 --description "Avviso modulo non funzionante" 2>/dev/null || true
           OPEN=$(gh issue list --label salute --state open --json number --jq '.[].number')
 

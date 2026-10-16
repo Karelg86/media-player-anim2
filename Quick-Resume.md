@@ -75,7 +75,9 @@ media-player-anim2/
 ### 🩺 Salute del modulo (robot giornaliero)
 - Ogni giorno GitHub esegue **Salute modulo**: test offline + test completo sul sito vero (ricerca → episodi → stream).
 - Se fallisce **2 volte di fila** apre una issue con etichetta `salute` (notifica su app GitHub / email): il sito ha probabilmente cambiato la struttura delle pagine e il modulo va aggiornato.
-- Un solo errore isolato non genera avvisi (Cloudflare a volte blocca i server di GitHub).
+- Un solo errore isolato non genera avvisi.
+- **AnimeUnity blocca i server di GitHub** (Cloudflare risponde `403` agli IP dei datacenter; verificato 2026-10-16): da lì la ricerca dà 0 risultati anche se il modulo funziona. `test-module.js` lo riconosce ed esce con codice **2** ("non verificabile"): il run resta verde con un avviso giallo e non apre né chiude issue. Per una verifica vera lanciare il test dal PC (rete italiana).
+- Codici di uscita di `test-module.js`: `0` ok, `1` test falliti, `2` sito non raggiungibile da questa rete.
 - Quando il test torna a funzionare la issue si chiude da sola. Lancio manuale: *Actions → Salute modulo → Run workflow*.
 
 ### 📱 Da cellulare
@@ -84,7 +86,7 @@ media-player-anim2/
 3. Il robot sostituisce il dominio in `main.json`, `extractor.js`, `Quick-Resume.md`, incrementa la versione, lancia i test, fa commit + push e chiude la issue.
 4. Su Shirox: Moduli → aggiorna.
 
-> Test del robot falliti ≠ errore per forza: Cloudflare a volte blocca i server di GitHub. Prova su Shirox o lancia il test dal PC.
+> Test del robot falliti ≠ errore per forza: AnimeUnity (Cloudflare) blocca i server di GitHub con `403`. Prova su Shirox o lancia il test dal PC.
 
 ### 💻 Da PC
 ```bash

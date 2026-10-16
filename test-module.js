@@ -6,6 +6,9 @@
  *   node test-module.js "one piece"    -> anime lungo (1000+ episodi, blocchi da 120)
  *   node test-module.js --mock         -> test OFFLINE con pagine finte (non tocca internet)
  *
+ * Codici di uscita: 0 = ok, 1 = test falliti, 2 = sito non raggiungibile da questa rete
+ * (403/503/429 di Cloudflare, es. dai server di GitHub Actions): test non verificabile.
+ *
  * extractor.js viene caricato in un contesto isolato, come fa Shirox con JavaScriptCore.
  * fetchv2 non esiste in Node: soraFetch usa automaticamente fetch come fallback.
  */
@@ -36,8 +39,21 @@ function check(label, condition, detail = "") {
 // ==========================================
 // TEST LIVE
 // ==========================================
+
+// AnimeUnity (Cloudflare) risponde 403 agli IP dei datacenter, compresi i server di GitHub:
+// da lì il modulo trova 0 risultati anche se funziona. Si registra il primo blocco visto
+// per distinguere "sito che blocca questa rete" da "modulo rotto".
+let blockedBy = null;
+async function trackedFetch(url, options) {
+  const res = await fetch(url, options);
+  if (!blockedBy && [403, 429, 503].includes(res.status)) {
+    blockedBy = `HTTP ${res.status} (server: ${res.headers.get("server") || "?"}) su ${url}`;
+  }
+  return res;
+}
+
 async function runLive(keyword) {
-  const ex = loadExtractor(fetch);
+  const ex = loadExtractor(trackedFetch);
   console.log(`\n🔎 Test LIVE con "${keyword}"\n`);
 
   const results = JSON.parse(await ex.searchResults(keyword));
@@ -184,6 +200,11 @@ async function runMock() {
   } catch (error) {
     console.error("💥 Errore imprevisto:", error);
     failures++;
+  }
+  if (failures > 0 && blockedBy) {
+    console.log(`\n🚫 Sito non raggiungibile da questa rete: ${blockedBy}`);
+    console.log("   Test non verificabile (non è un errore del modulo)\n");
+    process.exit(2);
   }
   console.log(failures === 0 ? "\n🎉 Tutti i test superati\n" : `\n⚠️  ${failures} test falliti\n`);
   process.exit(failures === 0 ? 0 : 1);
