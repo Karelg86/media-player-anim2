@@ -1,11 +1,11 @@
 {
   "sourceName": "AnimeUnity IT",
-  "iconUrl": "https://www.animeunity.so/favicon.ico",
+  "iconUrl": "https://www.animeunity.so/apple-touch-icon.png",
   "author": {
     "name": "Karelg86",
     "icon": "https://github.com/Karelg86.png"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "language": "Italian",
   "streamType": "HLS",
   "quality": "1080p",

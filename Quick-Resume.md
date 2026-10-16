@@ -1,6 +1,6 @@
 # QUICK-RESUME: Modulo Shirox — AnimeUnity IT
 
-> **Versione modulo:** 1.0.0  
+> **Versione modulo:** 1.0.1  
 > **Ultimo aggiornamento:** 14 Ottobre 2026  
 > **App principale:** iOS **Shirox** (compatibile anche con Sora / Luna / Mojuru)  
 > **Repository GitHub:** [Karelg86/media-player-anim2](https://github.com/Karelg86/media-player-anim2)  
@@ -23,6 +23,7 @@ Sito Laravel (come StreamingCommunity). I dati sono dentro attributi HTML in JSO
 
 ### Note
 - Il dominio senza `www` fa **redirect 302** alla versione con `www` (verificato 14/10/2026): nei file usare sempre l'indirizzo con `www`.
+- Icona del modulo: `/apple-touch-icon.png`. `/favicon.ico` risponde 200 ma **vuoto (0 byte)** e Shirox logga `[Image] decode failed ... len=0` (verificato 16/10/2026, corretto nella 1.0.1).
 - Ogni stagione è un anime separato (es. "Sousou no Frieren" e "Sousou no Frieren 2"), le versioni doppiate hanno una scheda propria con "(ITA)" nel titolo. Ogni scheda ha **una sola lista di episodi** → nessun problema con `detectSeasons` di Shirox.
 - Il numero episodio può essere decimale (es. "12.5"): Shirox lo accetta (`EpisodeLink.number` è `Double`).
 - Titolo mostrato in ricerca: `title_eng` (fallback `title_it`, poi `title`). Il titolo giapponese finisce in `aliases`.

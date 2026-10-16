@@ -1,6 +1,6 @@
 /**
  * Shirox / Sora / Luna Module Extractor - AnimeUnity IT
- * Versione: 1.0.0
+ * Versione: 1.0.1
  *
  * Basato sull'architettura del modulo StreamingCommunity v1.0.6 (stesso player Vixcloud):
  * - Ricerca da /archivio (JSON nell'attributo records del componente <archivio>)
