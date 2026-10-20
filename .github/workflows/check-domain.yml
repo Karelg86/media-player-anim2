@@ -1,11 +1,9 @@
-# Controlla ogni 6 ore se il dominio è cambiato.
+# DISATTIVATO (20/10/2026): il dominio non cambia, niente controllo automatico. Si può ancora avviare a mano da Actions.
 # NON modifica nessun file: se trova un cambio apre una issue di avviso (notifica su app GitHub / email).
 # Il cambio vero si fa con il workflow "Aggiorna dominio" (anche da cellulare).
 name: Controllo dominio
 
 on:
-  schedule:
-    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
