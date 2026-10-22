@@ -4,7 +4,7 @@
  *
  * Uso locale: node .github/scripts/update-domain.js streamingcommunityz.nuovo
  *
- * File toccati: main.json, extractor.js, Quick-Resume.md
+ * File toccati: main.json, extractor.js, Quick-Resume.md, test-module.js (BASE del test offline)
  * - ogni occorrenza del vecchio dominio (incluso cdn.<dominio>) diventa il nuovo
  * - version in main.json +1 sull'ultima cifra (1.0.6 -> 1.0.7), riportata anche negli altri due file
  */
@@ -13,7 +13,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = process.cwd();
-const FILES = ["main.json", "extractor.js", "Quick-Resume.md"];
+const FILES = ["main.json", "extractor.js", "Quick-Resume.md", "test-module.js"];
 
 function fail(message) {
   console.error(`❌ ${message}`);

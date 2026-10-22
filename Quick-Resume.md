@@ -1,7 +1,8 @@
 # QUICK-RESUME: Modulo Shirox — AnimeUnity IT
 
 > **Versione modulo:** 1.0.2  
-> **Ultimo aggiornamento:** 14 Ottobre 2026  
+> **Ultimo aggiornamento:** 22 Ottobre 2026  
+> **Dominio attuale:** `www.animeunity.co`  
 > **App principale:** iOS **Shirox** (compatibile anche con Sora / Luna / Mojuru)  
 > **Repository GitHub:** [Karelg86/media-player-anim2](https://github.com/Karelg86/media-player-anim2)  
 > **URL modulo:** `https://raw.githubusercontent.com/Karelg86/media-player-anim2/main/main.json`  
@@ -84,7 +85,7 @@ media-player-anim2/
 ### 📱 Da cellulare
 1. Apri il link nella issue, oppure `https://github.com/Karelg86/media-player-anim2/actions/workflows/update-domain.yml`
 2. **Run workflow** → scrivi il nuovo dominio **senza** `https://` e **con** `www.` (es. `www.animeunity.nuovo`) → conferma.
-3. Il robot sostituisce il dominio in `main.json`, `extractor.js`, `Quick-Resume.md`, incrementa la versione, lancia i test, fa commit + push e chiude la issue.
+3. Il robot sostituisce il dominio in `main.json`, `extractor.js`, `Quick-Resume.md`, `test-module.js`, incrementa la versione, lancia i test, fa commit + push e chiude la issue.
 4. Su Shirox: Moduli → aggiorna.
 
 > Test del robot falliti ≠ errore per forza: AnimeUnity (Cloudflare) blocca i server di GitHub con `403`. Prova su Shirox o lancia il test dal PC.
@@ -94,12 +95,13 @@ media-player-anim2/
 node .github/scripts/update-domain.js www.animeunity.nuovo
 node test-module.js "frieren"
 node test-module.js "one piece"
-git add main.json extractor.js Quick-Resume.md
-git commit -m "Update domain to www.animeunity.nuovo - v1.0.1"
+git add main.json extractor.js Quick-Resume.md test-module.js
+git commit -m "Update domain to www.animeunity.nuovo - vX.Y.Z"
 git push origin main
 ```
 
 > ⚠️ Shirox salva lo script in cache: incrementare `version` in `main.json` è **obbligatorio** per far scaricare la nuova versione. `update-domain.js` lo fa da solo.
+> Shirox controlla gli aggiornamenti all'avvio a freddo dell'app o col pulsante refresh nella schermata Modules: rilegge il `main.json` dal link installato e reinstalla se `version` cambia. Non serve reinserire il link (salta l'aggiornamento solo se lo script è stato modificato dentro l'app). Verificato sul sorgente Shirox il 22/10/2026.
 
 ---
 
