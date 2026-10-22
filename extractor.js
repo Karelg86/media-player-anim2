@@ -1,6 +1,6 @@
 /**
  * Shirox / Sora / Luna Module Extractor - AnimeUnity IT
- * Versione: 1.0.1
+ * Versione: 1.0.2
  *
  * Basato sull'architettura del modulo StreamingCommunity v1.0.6 (stesso player Vixcloud):
  * - Ricerca da /archivio (JSON nell'attributo records del componente <archivio>)
@@ -10,7 +10,7 @@
  */
 
 const CONFIG = {
-  BASE: "https://www.animeunity.so",
+  BASE: "https://www.animeunity.co",
 };
 
 // Il sito restituisce al massimo 120 episodi per richiesta
@@ -72,7 +72,7 @@ function parseJsonAttribute(html, tagName, attrName) {
   return JSON.parse(match[1].replace(/&quot;/g, '"'));
 }
 
-// "https://www.animeunity.so/anime/4851-frieren/76205" -> { animeId: "4851", slug: "frieren", episodeId: "76205" }
+// "https://www.animeunity.co/anime/4851-frieren/76205" -> { animeId: "4851", slug: "frieren", episodeId: "76205" }
 function parseAnimeUrl(url) {
   const match = /\/anime\/(\d+)-([^/?#]+)(?:\/(\d+))?/.exec(url || "");
   if (!match) return null;

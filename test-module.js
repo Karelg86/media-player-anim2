@@ -88,7 +88,7 @@ async function runLive(keyword) {
 // ==========================================
 // TEST OFFLINE (MOCK)
 // ==========================================
-const BASE = "https://www.animeunity.so";
+const BASE = "https://www.animeunity.co";
 const MOCK_TOTAL_EPISODES = 250; // -> 3 blocchi: 1-120, 121-240, 241-250
 
 function laravelAttr(obj) {

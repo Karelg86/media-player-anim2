@@ -1,6 +1,6 @@
 # QUICK-RESUME: Modulo Shirox — AnimeUnity IT
 
-> **Versione modulo:** 1.0.1  
+> **Versione modulo:** 1.0.2  
 > **Ultimo aggiornamento:** 14 Ottobre 2026  
 > **App principale:** iOS **Shirox** (compatibile anche con Sora / Luna / Mojuru)  
 > **Repository GitHub:** [Karelg86/media-player-anim2](https://github.com/Karelg86/media-player-anim2)  
