@@ -1,7 +1,7 @@
 # QUICK-RESUME: Modulo Shirox — AnimeUnity IT
 
-> **Versione modulo:** 1.0.2  
-> **Ultimo aggiornamento:** 22 Ottobre 2026  
+> **Versione modulo:** 1.0.3  
+> **Ultimo aggiornamento:** 10 Novembre 2026  
 > **Dominio attuale:** `www.animeunity.co`  
 > **App principale:** iOS **Shirox** (compatibile anche con Sora / Luna / Mojuru)  
 > **Repository GitHub:** [Karelg86/media-player-anim2](https://github.com/Karelg86/media-player-anim2)  
@@ -39,6 +39,7 @@ Sito Laravel (come StreamingCommunity). I dati sono dentro attributi HTML in JSO
 3. Stream: `url`, `token`, `expires` cercati **solo** da `window.masterPlaylist` fino alla fine del suo `<script>`. Vixcloud **non** chiude il blocco con `};` → niente regex sulle graffe.
 4. `extractStreamUrl` restituisce la **Master Playlist** HLS (non una risoluzione fissa): AVPlayer gestisce da solo la qualità (ABR) ed evita gli stalli di buffering. `h=1` aggiunto solo se `window.canPlayFHD = true`.
 5. `soraFetch` gestisce sia Shirox (`fetchv2` rigetta in caso di errore) sia Luna (`fetchv2` risolve con `{error}` senza `status`).
+6. **Retry (dalla 1.0.3, 10/11/2026):** `soraFetch` ritenta fino a **3 volte** (pausa 1 s, poi 2 s) se la rete fallisce o il server risponde `5xx`, `429` o `408`, entro ~50 s (Shirox concede 120 s a ogni funzione). `403` e `404` non vengono ritentati. Stesso schema di StreamingCommunity, VixSrc e dei moduli manga. Test live del 10/11/2026 da PC: "frieren" ok. Backup pre-modifica: `backup/v1.0.2/` (solo sul PC).
 
 ### Limite noto: "Continua a guardare"
 Lo stream salvato da Shirox contiene un token Vixcloud a scadenza. Nelle build recenti di Shirox (`Views/ContinueWatchingCard.swift` → `onStreamExpired`) quando il link è scaduto l'app richiama `extractEpisodes`, ritrova l'episodio tramite `href` (o numero) e chiede un nuovo stream: il problema dovrebbe risolversi da solo (da verificare sull'iPhone). Per questo gli `href` degli episodi devono restare **stabili** tra le versioni del modulo.
@@ -56,7 +57,7 @@ media-player-anim2/
 ├── .gitignore                      # Esclude backup/ e file locali
 └── .github/
     ├── workflows/
-    │   ├── check-domain.yml        # Robot: controlla il dominio ogni 6 ore e AVVISA (issue)
+    │   ├── check-domain.yml        # Robot: controlla il dominio e AVVISA (issue). Solo avvio manuale dal 20/10/2026
     │   ├── update-domain.yml       # Robot: cambio dominio su richiesta (anche da cellulare)
     │   └── health-check.yml        # Robot: test completo ogni giorno, AVVISA se il modulo non funziona
     └── scripts/
@@ -69,10 +70,9 @@ media-player-anim2/
 ## 4. CAMBIO DOMINIO
 
 ### 🤖 Avviso automatico
-- Ogni 6 ore GitHub esegue **Controllo dominio** (non modifica nulla).
+- **Controllo dominio** è disattivato dal 20/10/2026 (il dominio non cambia): parte solo a mano da *Actions → Controllo dominio → Run workflow*. Non modifica nulla.
 - Se il dominio reindirizza altrove **o non risponde più**, apre una **issue** con etichetta `dominio` assegnata a te → notifica su app GitHub / email.
-- Lancio manuale: *Actions → Controllo dominio → Run workflow*.
-- ⚠️ GitHub sospende i workflow programmati dopo **60 giorni senza attività** nel repo (manda una email prima). Riattivazione: *Actions → Controllo dominio → Enable workflow*.
+- ⚠️ GitHub sospende i workflow programmati (qui: **Salute modulo**) dopo **60 giorni senza attività** nel repo (manda una email prima). Riattivazione: *Actions → Salute modulo → Enable workflow*.
 
 ### 🩺 Salute del modulo (robot giornaliero)
 - Ogni giorno GitHub esegue **Salute modulo**: test offline + test completo sul sito vero (ricerca → episodi → stream).
@@ -108,7 +108,7 @@ git push origin main
 ## 5. TEST
 
 ```bash
-node test-module.js --mock         # offline: apostrofi, blocchi da 120, ordine, max 3 in parallelo, numeri decimali, stream
+node test-module.js --mock         # offline: apostrofi, blocchi da 120, ordine, max 3 in parallelo, numeri decimali, stream, retry
 node test-module.js "frieren"      # live
 node test-module.js "one piece"    # live, anime lungo
 ```

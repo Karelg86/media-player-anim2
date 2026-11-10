@@ -185,6 +185,37 @@ async function runMock() {
   check("stream: URL dal blocco masterPlaylist (non dagli script esterni)",
     stream === "https://vixcloud.co/playlist/999?b=1&token=TOKEN123&expires=1999999999&h=1", stream || "null");
   check("stream: URL senza id episodio -> null", (await ex.extractStreamUrl(`${BASE}/anime/42-frieren`)) === null);
+
+  // Retry: errori temporanei del server/rete prima della risposta buona
+  const flaky = (failures) => {
+    const calls = {};
+    const base = makeMockFetch({ requests: [], inFlight: 0, maxInFlight: 0 });
+    const fetchImpl = async (url, options) => {
+      calls[url] = (calls[url] || 0) + 1;
+      const failure = failures[calls[url] - 1];
+      if (failure === "rete") throw new Error("network down");
+      if (failure) return { status: failure, text: async () => "" };
+      return base(url, options);
+    };
+    return { calls, fetchImpl };
+  };
+  const streamUrl = `${BASE}/anime/42-frieren/1001`;
+  const embedApi = `${BASE}/embed-url/1001`;
+  const expected = "https://vixcloud.co/playlist/999?b=1&token=TOKEN123&expires=1999999999&h=1";
+
+  let f = flaky([503]);
+  check("retry: 503 poi ok -> stream", (await loadExtractor(f.fetchImpl).extractStreamUrl(streamUrl)) === expected, `richieste embed-url: ${f.calls[embedApi]}`);
+
+  f = flaky(["rete"]);
+  check("retry: errore di rete poi ok -> stream", (await loadExtractor(f.fetchImpl).extractStreamUrl(streamUrl)) === expected);
+
+  f = flaky([404]);
+  await loadExtractor(f.fetchImpl).extractStreamUrl(streamUrl);
+  check("retry: 404 non ritentato", f.calls[embedApi] === 1, `${f.calls[embedApi]} richieste`);
+
+  f = flaky([503, 503, 503, 503]);
+  const dead = await loadExtractor(f.fetchImpl).extractStreamUrl(streamUrl);
+  check("retry: max 3 tentativi poi null", dead === null && f.calls[embedApi] === 3, `${f.calls[embedApi]} richieste`);
 }
 
 // ==========================================
