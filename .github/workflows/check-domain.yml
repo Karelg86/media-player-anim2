@@ -1,9 +1,11 @@
-# DISATTIVATO (20/10/2026): il dominio non cambia, niente controllo automatico. Si può ancora avviare a mano da Actions.
+# Controlla ogni 6 ore se il dominio è cambiato.
 # NON modifica nessun file: se trova un cambio apre una issue di avviso (notifica su app GitHub / email).
 # Il cambio vero si fa con il workflow "Aggiorna dominio" (anche da cellulare).
 name: Controllo dominio
 
 on:
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -20,9 +22,35 @@ jobs:
         with:
           node-version: "22"
 
+      # Ricorda quanti controlli di fila il sito non ha risposto (evita avvisi per buchi di poche ore)
+      - name: Recupera stato precedente
+        uses: actions/cache/restore@v4
+        with:
+          path: .domain-state
+          key: domain-state-${{ github.run_id }}
+          restore-keys: domain-state-
+
       - name: Controlla dominio attuale
         id: check
         run: node .github/scripts/check-domain.js
+
+      - name: Salva stato
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .domain-state
+          key: domain-state-${{ github.run_id }}
+
+      # Dominio aggiornato a mano (push dal PC) o sito tornato raggiungibile: l'avviso non serve più
+      - name: Chiudi issue di avviso superata
+        if: steps.check.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD_DOMAIN: ${{ steps.check.outputs.old_domain }}
+        run: |
+          for n in $(gh issue list --label dominio --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "✅ Il dominio \`$OLD_DOMAIN\` di main.json risponde senza cambi: avviso chiuso."
+          done
 
       - name: Apri issue di avviso
         if: steps.check.outputs.alert == 'true'
@@ -33,9 +61,20 @@ jobs:
           REASON: ${{ steps.check.outputs.reason }}
           UPDATE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/update-domain.yml
         run: |
-          OPEN=$(gh issue list --label dominio --state open --json number --jq 'length')
-          if [ "$OPEN" != "0" ]; then
-            echo "Esiste già una issue di avviso aperta, non ne apro un'altra."
+          OPEN=$(gh issue list --label dominio --state open --json number,title --jq '.[0] // empty | "\(.number)\t\(.title)"')
+          if [ -n "$OPEN" ]; then
+            NUM="${OPEN%%$'\t'*}"
+            TITLE="${OPEN#*$'\t'}"
+            # Issue già aperta: se ora conosco il nuovo dominio e lei no, la aggiorno (arriva una notifica)
+            if [ -n "$NEW_DOMAIN" ] && [[ "$TITLE" != *"$NEW_DOMAIN"* ]]; then
+              gh issue edit "$NUM" --title "⚠️ Dominio cambiato? $OLD_DOMAIN -> $NEW_DOMAIN"
+              gh issue comment "$NUM" --body "🔎 Nuovo dominio trovato: \`$NEW_DOMAIN\`. $REASON
+
+          Aggiorna da qui: $UPDATE_URL (scrivi \`$NEW_DOMAIN\`)."
+              echo "Issue #$NUM aggiornata con $NEW_DOMAIN."
+            else
+              echo "Esiste già una issue di avviso aperta (#$NUM), niente di nuovo da aggiungere."
+            fi
             exit 0
           fi
           gh label create dominio --color D93F0B --description "Avviso cambio dominio" 2>/dev/null || true

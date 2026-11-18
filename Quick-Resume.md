@@ -70,8 +70,9 @@ media-player-anim2/
 ## 4. CAMBIO DOMINIO
 
 ### 🤖 Avviso automatico
-- **Controllo dominio** è disattivato dal 20/10/2026 (il dominio non cambia): parte solo a mano da *Actions → Controllo dominio → Run workflow*. Non modifica nulla.
-- Se il dominio reindirizza altrove **o non risponde più**, apre una **issue** con etichetta `dominio` assegnata a te → notifica su app GitHub / email.
+- **Controllo dominio** gira da solo ogni 6 ore (riattivato il 18/11/2026). Se il dominio reindirizza altrove, apre una **issue** con etichetta `dominio` (notifica su app GitHub / email) con il nuovo dominio e il link al robot. Se il sito non risponde, avvisa solo dopo 2 controlli di fila. Quando il dominio di `main.json` torna a rispondere, la issue si chiude da sola.
+- Dopo l'aggiornamento (robot o PC) la versione in `main.json` sale: Shirox scarica il modulo nuovo da solo all'avvio a freddo o col refresh in Moduli, senza reinserire il link.
+- Limite: Cloudflare a volte risponde 403 ai server di GitHub; in quel caso il controllo vede il sito "vivo" e non si accorge del cambio. Se il modulo smette di funzionare, controllare il dominio a mano.
 - ⚠️ GitHub sospende i workflow programmati (qui: **Salute modulo**) dopo **60 giorni senza attività** nel repo (manda una email prima). Riattivazione: *Actions → Salute modulo → Enable workflow*.
 
 ### 🩺 Salute del modulo (robot giornaliero)

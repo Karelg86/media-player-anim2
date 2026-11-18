@@ -5,7 +5,7 @@
  * Uso locale: node .github/scripts/check-domain.js
  *
  * Output (in GITHUB_OUTPUT se presente, altrimenti a schermo):
- *   alert=true|false   old_domain=...   new_domain=...   reason=...
+ *   alert=true|false   ok=true (solo se il dominio risponde senza cambi)   old_domain=...   new_domain=...   reason=...
  */
 
 const fs = require("fs");
@@ -47,13 +47,26 @@ async function probe(url) {
     }
   }
 
-  // Sito irraggiungibile (dominio chiuso, DNS, nessuna risposta)
+  // Contatore dei controlli consecutivi senza risposta (salvato nella cache di GitHub tra un giro e l'altro)
+  const statePath = path.join(ROOT, ".domain-state", "unreachable");
+  const previousFails = fs.existsSync(statePath) ? Number(fs.readFileSync(statePath, "utf8")) || 0 : 0;
+  const fails = result ? 0 : previousFails + 1;
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, String(fails));
+
+  // Sito irraggiungibile (dominio chiuso, DNS, nessuna risposta).
+  // Al primo giro non avvisa: durante un cambio dominio il sito sparisce spesso per qualche ora.
   if (!result) {
+    const reasonCode = lastError && (lastError.cause?.code || lastError.message);
+    if (fails < 2) {
+      setOutput({ alert: false, old_domain: oldDomain, new_domain: "", reason: `Il dominio ${oldDomain} non risponde (${reasonCode}), primo giro: riprovo al prossimo controllo.` });
+      return;
+    }
     setOutput({
       alert: true,
       old_domain: oldDomain,
       new_domain: "",
-      reason: `Il dominio ${oldDomain} non risponde (${lastError && (lastError.cause?.code || lastError.message)}). Potrebbe essere stato chiuso senza redirect: trova il nuovo indirizzo a mano.`,
+      reason: `Il dominio ${oldDomain} non risponde (${reasonCode}) da ${fails} controlli di fila. Potrebbe essere stato chiuso senza redirect: trova il nuovo indirizzo a mano.`,
     });
     return;
   }
@@ -72,8 +85,9 @@ async function probe(url) {
     }
   }
 
-  // 200, 403/503 di Cloudflare, redirect interni: il sito è vivo, nessun avviso
-  setOutput({ alert: false, old_domain: oldDomain, new_domain: "", reason: `HTTP ${result.status}, nessun cambio rilevato.` });
+  // 200, 403/503 di Cloudflare, redirect interni: il sito è vivo, nessun avviso.
+  // ok=true: il dominio di main.json funziona, quindi un avviso rimasto aperto si può chiudere
+  setOutput({ alert: false, ok: true, old_domain: oldDomain, new_domain: "", reason: `HTTP ${result.status}, nessun cambio rilevato.` });
 })().catch((error) => {
   console.error(error);
   process.exit(1);
