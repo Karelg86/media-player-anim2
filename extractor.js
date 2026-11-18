@@ -1,26 +1,29 @@
 /**
  * Shirox / Sora / Luna Module Extractor - AnimeUnity IT
- * Versione: 1.0.3
+ * Versione: 1.1.0
  *
- * Novità v1.0.3:
- * - soraFetch ritenta fino a 3 volte (pausa 1 s, 2 s) se la rete fallisce o il server
- *   risponde 5xx/429/408, entro ~50 s (Shirox concede 120 s a ogni funzione del modulo)
+ * Novità v1.1.0 (18/11/2026): il sito si è spostato su animeunity.cx ed è stato rifatto.
+ * - Ricerca da /api/search?q= (JSON). Un anime ha ora una sola scheda con le varianti di lingua:
+ *   se esistono sia "ita" (doppiato) sia "jpn" (sottotitolato) si mostrano due risultati,
+ *   "Titolo (ITA)" e "Titolo", come prima.
+ * - Dettagli dalla pagina /anime/{id}-{slug} (JSON nell'attributo data-page, props.anime)
+ * - Episodi da /api/anime/{id}/episodes?start=N a blocchi da 120, max EPISODE_CONCURRENCY in parallelo
+ * - Stream: pagina /anime/{id}-{slug}/{videoId} -> props.embedUrl (embed Vixcloud) -> Master Playlist HLS
  *
- * Basato sull'architettura del modulo StreamingCommunity v1.0.6 (stesso player Vixcloud):
- * - Ricerca da /archivio (JSON nell'attributo records del componente <archivio>)
- * - Dettagli dal componente <video-player anime="...">
- * - Episodi da /info_api/{id}/1 a blocchi da 120 (limite del sito), max EPISODE_CONCURRENCY in parallelo
- * - Stream: /embed-url/{episodeId} -> embed Vixcloud -> Master Playlist HLS (ABR nativo di AVPlayer)
+ * v1.0.3: soraFetch ritenta fino a 3 volte (pausa 1 s, 2 s) se la rete fallisce o il server
+ * risponde 5xx/429/408, entro ~50 s (Shirox concede 120 s a ogni funzione del modulo)
  */
 
 const CONFIG = {
-  BASE: "https://www.animeunity.co",
+  BASE: "https://animeunity.cx",
 };
 
-// Il sito restituisce al massimo 120 episodi per richiesta
+// Il sito restituisce 120 episodi per richiesta (tab_size)
 const EPISODE_PAGE_SIZE = 120;
 // Quanti blocchi da 120 episodi scaricare contemporaneamente (One Piece = 10 blocchi)
 const EPISODE_CONCURRENCY = 3;
+// Lingue delle varianti, nell'ordine in cui compaiono i risultati
+const LANGUAGES = ["ita", "jpn"];
 
 // --- UTILITY ---
 function decodeEntities(str = "") {
@@ -67,20 +70,37 @@ async function mapWithConcurrency(items, limit, fn) {
   return results;
 }
 
-// Legge un attributo HTML contenente JSON (Laravel lo codifica con &quot;).
-// Solo &quot; prima del parse: decodeEntities va applicato DOPO, sui singoli campi.
-function parseJsonAttribute(html, tagName, attrName) {
-  const regex = new RegExp(`<${tagName}[^>]*\\s${attrName}="([^"]*)"`);
-  const match = regex.exec(html);
+// Props della pagina (Inertia): JSON nell'attributo data-page, codificato da Laravel
+// (&quot; &#039; &lt; &gt; &amp;). Qui si decodifica tutto PRIMA del parse: le virgolette dentro
+// le stringhe JSON arrivano già come \&quot; e diventano \" (JSON valido). &amp; per ultimo,
+// altrimenti "&amp;lt;" diventerebbe "<".
+function parsePageProps(html) {
+  const match = /\sdata-page="([^"]*)"/.exec(html || "");
   if (!match || !match[1]) return null;
-  return JSON.parse(match[1].replace(/&quot;/g, '"'));
+  const json = match[1]
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+  const page = JSON.parse(json);
+  return page && page.props ? page.props : null;
 }
 
-// "https://www.animeunity.co/anime/4851-frieren/76205" -> { animeId: "4851", slug: "frieren", episodeId: "76205" }
+// "https://animeunity.cx/anime/4851-frieren/74644" -> { animeId: "4851", slug: "frieren", videoId: "74644", lang: null }
+// "https://animeunity.cx/anime/4851-frieren?lang=ita" -> { animeId: "4851", slug: "frieren", videoId: null, lang: "ita" }
 function parseAnimeUrl(url) {
   const match = /\/anime\/(\d+)-([^/?#]+)(?:\/(\d+))?/.exec(url || "");
   if (!match) return null;
-  return { animeId: match[1], slug: match[2], episodeId: match[3] || null };
+  const langMatch = /[?&]lang=(ita|jpn)\b/.exec(url);
+  return { animeId: match[1], slug: match[2], videoId: match[3] || null, lang: langMatch ? langMatch[1] : null };
+}
+
+// Video di un episodio nella lingua chiesta; senza lingua il primo disponibile.
+function pickVideo(episode, lang) {
+  const videos = (episode && Array.isArray(episode.videos) ? episode.videos : []).filter((v) => v && !v.is_hidden);
+  if (lang) return videos.find((v) => v.language === lang) || null;
+  return videos[0] || null;
 }
 
 // --- FETCH ENGINE COMPATIBILE SHIROX / SORA / LUNA ---
@@ -122,25 +142,42 @@ async function soraFetchOnce(url, options) {
   }
 }
 
+const JSON_HEADERS = { "Accept": "application/json", "X-Requested-With": "XMLHttpRequest" };
+
 // ==========================================
 // 1. RICERCA
 // ==========================================
 async function searchResults(keyword) {
   try {
-    const response = await soraFetch(`${CONFIG.BASE}/archivio?title=${encodeURIComponent(keyword)}`);
+    const response = await soraFetch(`${CONFIG.BASE}/api/search?q=${encodeURIComponent(keyword)}`, {
+      headers: JSON_HEADERS,
+      method: "GET",
+      body: null,
+    });
     if (!response) return JSON.stringify([]);
-    const html = await response.text();
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
+    const records = data && Array.isArray(data.data) ? data.data : [];
 
-    const records = parseJsonAttribute(html, "archivio", "records") || [];
-
-    const results = records
-      .map((item) => ({
-        title: decodeEntities(item.title_eng || item.title_it || item.title || ""),
-        image: item.imageurl || "",
-        href: `${CONFIG.BASE}/anime/${item.id}-${item.slug}`,
-      }))
-      .filter((item) => item.title && item.image);
-
+    const results = [];
+    for (const item of records) {
+      const title = decodeEntities(item.title_it || item.title || item.title_ja || "");
+      const images = item.images || {};
+      const image = images.poster || images.cover || "";
+      if (!title || !image || !item.id || !item.slug) continue;
+      const href = `${CONFIG.BASE}/anime/${item.id}-${item.slug}`;
+      const languages = (Array.isArray(item.variants) ? item.variants : [])
+        .map((v) => v && v.language)
+        .filter((lang) => LANGUAGES.includes(lang));
+      if (languages.length === 0) {
+        results.push({ title, image, href });
+        continue;
+      }
+      for (const lang of LANGUAGES) {
+        if (!languages.includes(lang)) continue;
+        results.push({ title: lang === "ita" ? `${title} (ITA)` : title, image, href: `${href}?lang=${lang}` });
+      }
+    }
     return JSON.stringify(results);
   } catch (error) {
     return JSON.stringify([]);
@@ -157,15 +194,14 @@ async function extractDetails(url) {
 
     const response = await soraFetch(`${CONFIG.BASE}/anime/${info.animeId}-${info.slug}`);
     if (!response) return JSON.stringify([]);
-    const html = await response.text();
-
-    const anime = parseJsonAttribute(html, "video-player", "anime");
+    const props = parsePageProps(await response.text());
+    const anime = props && props.anime;
     if (!anime) return JSON.stringify([]);
 
     return JSON.stringify([{
-      description: decodeEntities(anime.plot || "N/A"),
-      aliases: decodeEntities(anime.title || anime.title_eng || "N/A"),
-      airdate: anime.date ? String(anime.date) : "N/A",
+      description: anime.plot || "N/A",
+      aliases: anime.title_ja || anime.title || "N/A",
+      airdate: anime.year ? String(anime.year) : "N/A",
     }]);
   } catch (error) {
     return JSON.stringify([]);
@@ -175,11 +211,12 @@ async function extractDetails(url) {
 // ==========================================
 // 3. EPISODI
 // ==========================================
-async function fetchEpisodeRange(animeId, start, end) {
-  const response = await soraFetch(
-    `${CONFIG.BASE}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`,
-    { headers: { "Accept": "application/json", "X-Requested-With": "XMLHttpRequest" }, method: "GET", body: null }
-  );
+async function fetchEpisodeBlock(animeId, start) {
+  const response = await soraFetch(`${CONFIG.BASE}/api/anime/${animeId}/episodes?start=${start}`, {
+    headers: JSON_HEADERS,
+    method: "GET",
+    body: null,
+  });
   if (!response) return null;
   const text = await response.text();
   return text ? JSON.parse(text) : null;
@@ -191,31 +228,33 @@ async function extractEpisodes(url) {
     if (!info) return JSON.stringify([]);
     const animeHref = `${CONFIG.BASE}/anime/${info.animeId}-${info.slug}`;
 
-    // Primo blocco: contiene anche episodes_count
-    const first = await fetchEpisodeRange(info.animeId, 1, EPISODE_PAGE_SIZE);
+    // Primo blocco: contiene anche total e tab_size
+    const first = await fetchEpisodeBlock(info.animeId, 1);
     if (!first || !Array.isArray(first.episodes)) return JSON.stringify([]);
 
-    const total = Number(first.episodes_count) || first.episodes.length;
-    const ranges = [];
-    for (let start = EPISODE_PAGE_SIZE + 1; start <= total; start += EPISODE_PAGE_SIZE) {
-      ranges.push([start, Math.min(start + EPISODE_PAGE_SIZE - 1, total)]);
-    }
+    const total = Number(first.total) || first.episodes.length;
+    const size = Number(first.tab_size) || EPISODE_PAGE_SIZE;
+    const starts = [];
+    for (let start = size + 1; start <= total; start += size) starts.push(start);
 
-    // Blocchi successivi a gruppi, risultati nell'ordine dei range
-    const rest = await mapWithConcurrency(ranges, EPISODE_CONCURRENCY, ([start, end]) =>
-      fetchEpisodeRange(info.animeId, start, end)
+    // Blocchi successivi a gruppi, risultati nell'ordine dei blocchi
+    const rest = await mapWithConcurrency(starts, EPISODE_CONCURRENCY, (start) =>
+      fetchEpisodeBlock(info.animeId, start)
     );
 
     const allEpisodes = [first, ...rest]
       .filter((block) => block && Array.isArray(block.episodes))
       .flatMap((block) => block.episodes);
 
-    const episodes = allEpisodes.map((episode, index) => {
+    const episodes = [];
+    allEpisodes.forEach((episode, index) => {
+      const video = pickVideo(episode, info.lang);
+      if (!video) return;
       const number = parseFloat(episode.number);
-      return {
-        href: `${animeHref}/${episode.id}`,
+      episodes.push({
+        href: `${animeHref}/${video.id}`,
         number: Number.isNaN(number) ? index + 1 : number,
-      };
+      });
     });
 
     return JSON.stringify(episodes);
@@ -230,17 +269,14 @@ async function extractEpisodes(url) {
 async function extractStreamUrl(url) {
   try {
     const info = parseAnimeUrl(url);
-    if (!info || !info.episodeId) return null;
-    const pageUrl = `${CONFIG.BASE}/anime/${info.animeId}-${info.slug}/${info.episodeId}`;
+    if (!info || !info.videoId) return null;
+    const pageUrl = `${CONFIG.BASE}/anime/${info.animeId}-${info.slug}/${info.videoId}`;
 
-    // /embed-url/{id} restituisce come testo l'URL dell'embed Vixcloud (con token, expires, canPlayFHD)
-    const response1 = await soraFetch(`${CONFIG.BASE}/embed-url/${info.episodeId}`, {
-      headers: { "Referer": pageUrl, "X-Requested-With": "XMLHttpRequest" },
-      method: "GET",
-      body: null,
-    });
+    // La pagina dell'episodio contiene l'URL dell'embed Vixcloud (con token, expires, canPlayFHD)
+    const response1 = await soraFetch(pageUrl);
     if (!response1) return null;
-    const embedUrl = decodeEntities((await response1.text()).trim());
+    const props = parsePageProps(await response1.text());
+    const embedUrl = props && typeof props.embedUrl === "string" ? props.embedUrl.trim() : "";
     if (!/^https?:\/\//.test(embedUrl)) return null;
 
     const response2 = await soraFetch(embedUrl, {

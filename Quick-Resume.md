@@ -1,8 +1,8 @@
 # QUICK-RESUME: Modulo Shirox — AnimeUnity IT
 
-> **Versione modulo:** 1.0.3  
-> **Ultimo aggiornamento:** 10 Novembre 2026  
-> **Dominio attuale:** `www.animeunity.co`  
+> **Versione modulo:** 1.1.0  
+> **Ultimo aggiornamento:** 18 Novembre 2026  
+> **Dominio attuale:** `animeunity.cx` (senza www)  
 > **App principale:** iOS **Shirox** (compatibile anche con Sora / Luna / Mojuru)  
 > **Repository GitHub:** [Karelg86/media-player-anim2](https://github.com/Karelg86/media-player-anim2)  
 > **URL modulo:** `https://raw.githubusercontent.com/Karelg86/media-player-anim2/main/main.json`  
@@ -12,29 +12,29 @@
 
 ## 1. COME FUNZIONA ANIMEUNITY
 
-Sito Laravel (come StreamingCommunity). I dati sono dentro attributi HTML in JSON, codificati con `&quot;`.
+Sito Laravel + Inertia (rifatto a novembre 2026). Ricerca ed episodi rispondono in JSON; le pagine hanno i dati nell'attributo `data-page` (JSON codificato con &quot; &#039; &lt; &gt; &amp;).
 
 | Passo | Indirizzo | Cosa restituisce |
 |---|---|---|
-| Ricerca | `/archivio?title=...` | `<archivio records="[...]">`: lista anime (id, slug, title, title_eng, imageurl, plot, dub, ...) |
-| Dettagli | `/anime/{id}-{slug}` | `<video-player anime="{...}">`: plot, title (giapponese), date (anno) |
-| Episodi | `/info_api/{id}/1?start_range=A&end_range=B` | JSON `{episodes_count, episodes: [{id, number, ...}]}` — **max 120 per richiesta** (oltre: `"You can't fetch for a range bigger than 120"`) |
-| Stream 1 | `/embed-url/{episodeId}` | Testo: URL embed Vixcloud (`https://vixcloud.co/embed/...?token=...&expires=...&canPlayFHD=1`) |
-| Stream 2 | embed Vixcloud | `window.masterPlaylist = { params: {token, expires}, url }` → Master Playlist HLS |
+| Ricerca | `/api/search?q=...` | JSON `{data: [{id, slug, title, title_ja, title_it, images: {poster, cover}, variants: [{language: "ita"/"jpn"}]}], count, hasMore}` |
+| Dettagli | `/anime/{id}-{slug}` | Pagina con il JSON nell'attributo `data-page` → `props.anime` (`plot`, `title_ja`, `year`) |
+| Episodi | `/api/anime/{id}/episodes?start=N` | JSON `{episodes: [{id, number, videos: [{id, language, is_hidden}]}], start, tab_size: 120, total}` |
+| Stream 1 | `/anime/{id}-{slug}/{videoId}` | `data-page` → `props.embedUrl` (embed Vixcloud con token) |
+| Stream 2 | embed Vixcloud | `window.masterPlaylist` → Master Playlist HLS (come prima) |
 
 ### Note
-- Il dominio senza `www` fa **redirect 302** alla versione con `www` (verificato 14/10/2026): nei file usare sempre l'indirizzo con `www`.
-- Icona del modulo: `/apple-touch-icon.png`. `/favicon.ico` risponde 200 ma **vuoto (0 byte)** e Shirox logga `[Image] decode failed ... len=0` (verificato 16/10/2026, corretto nella 1.0.1).
-- Ogni stagione è un anime separato (es. "Sousou no Frieren" e "Sousou no Frieren 2"), le versioni doppiate hanno una scheda propria con "(ITA)" nel titolo. Ogni scheda ha **una sola lista di episodi** → nessun problema con `detectSeasons` di Shirox.
+- Dal 18/11/2026 `www.animeunity.co` fa redirect 301 a `animeunity.cx` (senza www). `www.animeunity.cx` non risponde.
+- Icona del modulo: `/icon/apple-touch-icon.png` (la vecchia `/apple-touch-icon.png` dà 404).
+- Ogni stagione è un anime separato (es. "Frieren: Beyond Journey's End" e "… 2"). Doppiato e sottotitolato sono nella stessa scheda (`variants`, e in ogni episodio un video per lingua): il modulo mostra due risultati, "Titolo (ITA)" con `?lang=ita` e "Titolo" con `?lang=jpn`. Gli episodi senza video nella lingua scelta non compaiono.
 - Il numero episodio può essere decimale (es. "12.5"): Shirox lo accetta (`EpisodeLink.number` è `Double`).
-- Titolo mostrato in ricerca: `title_eng` (fallback `title_it`, poi `title`). Il titolo giapponese finisce in `aliases`.
+- Titolo mostrato in ricerca: `title_it` (fallback `title`, poi `title_ja`). In `aliases` va `title_ja`.
 
 ---
 
 ## 2. SCELTE TECNICHE (da non toccare)
 
-1. Prima di `JSON.parse` sugli attributi si sostituisce **solo** `&quot;`. `decodeEntities()` va applicato **dopo**, sui singoli campi (stesso motivo del modulo StreamingCommunity).
-2. Episodi a blocchi da 120 (`EPISODE_PAGE_SIZE`), massimo 3 blocchi in parallelo (`EPISODE_CONCURRENCY`), risultati sempre nell'ordine dei blocchi. One Piece (1180 episodi = 10 blocchi): ~0,8 s (test 14/10/2026).
+1. Prima di `JSON.parse` sugli attributi si sostituisce **solo** `&quot;`. `decodeEntities()` va applicato **dopo**, sui singoli campi (stesso motivo del modulo StreamingCommunity). Per l'attributo `data-page` (`parsePageProps`) invece si decodifica tutto prima del parse, con `&amp;` per ultimo: le virgolette dentro le stringhe arrivano come `\&quot;` e diventano `\"`.
+2. Episodi a blocchi da 120 con `?start=1, 121, 241…` (`EPISODE_PAGE_SIZE`), massimo 3 blocchi in parallelo (`EPISODE_CONCURRENCY`), risultati sempre nell'ordine dei blocchi. One Piece (1180 episodi = 10 blocchi): ~0,8 s (test 14/10/2026).
    - ⚙️ Se Shirox dà problemi sugli anime lunghi: `EPISODE_CONCURRENCY = 2` oppure `1`.
 3. Stream: `url`, `token`, `expires` cercati **solo** da `window.masterPlaylist` fino alla fine del suo `<script>`. Vixcloud **non** chiude il blocco con `};` → niente regex sulle graffe.
 4. `extractStreamUrl` restituisce la **Master Playlist** HLS (non una risoluzione fissa): AVPlayer gestisce da solo la qualità (ABR) ed evita gli stalli di buffering. `h=1` aggiunto solo se `window.canPlayFHD = true`.
@@ -42,7 +42,7 @@ Sito Laravel (come StreamingCommunity). I dati sono dentro attributi HTML in JSO
 6. **Retry (dalla 1.0.3, 10/11/2026):** `soraFetch` ritenta fino a **3 volte** (pausa 1 s, poi 2 s) se la rete fallisce o il server risponde `5xx`, `429` o `408`, entro ~50 s (Shirox concede 120 s a ogni funzione). `403` e `404` non vengono ritentati. Stesso schema di StreamingCommunity, VixSrc e dei moduli manga. Test live del 10/11/2026 da PC: "frieren" ok. Backup pre-modifica: `backup/v1.0.2/` (solo sul PC).
 
 ### Limite noto: "Continua a guardare"
-Lo stream salvato da Shirox contiene un token Vixcloud a scadenza. Nelle build recenti di Shirox (`Views/ContinueWatchingCard.swift` → `onStreamExpired`) quando il link è scaduto l'app richiama `extractEpisodes`, ritrova l'episodio tramite `href` (o numero) e chiede un nuovo stream: il problema dovrebbe risolversi da solo (da verificare sull'iPhone). Per questo gli `href` degli episodi devono restare **stabili** tra le versioni del modulo.
+Lo stream salvato da Shirox contiene un token Vixcloud a scadenza. Nelle build recenti di Shirox (`Views/ContinueWatchingCard.swift` → `onStreamExpired`) quando il link è scaduto l'app richiama `extractEpisodes`, ritrova l'episodio tramite `href` (o numero) e chiede un nuovo stream: il problema dovrebbe risolversi da solo (da verificare sull'iPhone). Per questo gli `href` degli episodi devono restare **stabili** tra le versioni del modulo. Con la v1.1.0 gli href sono cambiati (dominio nuovo e id del video al posto dell'id episodio): gli episodi in "Continua a guardare" salvati con la v1.0.x non si riprendono, vanno riaperti dalla ricerca.
 
 ---
 
@@ -84,7 +84,7 @@ media-player-anim2/
 
 ### 📱 Da cellulare
 1. Apri il link nella issue, oppure `https://github.com/Karelg86/media-player-anim2/actions/workflows/update-domain.yml`
-2. **Run workflow** → scrivi il nuovo dominio **senza** `https://` e **con** `www.` (es. `www.animeunity.nuovo`) → conferma.
+2. **Run workflow** → scrivi il nuovo dominio **senza** `https://`, con o senza `www.` come lo usa il sito (oggi `animeunity.cx`, senza www) → conferma.
 3. Il robot sostituisce il dominio in `main.json`, `extractor.js`, `Quick-Resume.md`, `test-module.js`, incrementa la versione, lancia i test, fa commit + push e chiude la issue.
 4. Su Shirox: Moduli → aggiorna.
 
@@ -92,11 +92,11 @@ media-player-anim2/
 
 ### 💻 Da PC
 ```bash
-node .github/scripts/update-domain.js www.animeunity.nuovo
+node .github/scripts/update-domain.js animeunity.nuovo
 node test-module.js "frieren"
 node test-module.js "one piece"
 git add main.json extractor.js Quick-Resume.md test-module.js
-git commit -m "Update domain to www.animeunity.nuovo - vX.Y.Z"
+git commit -m "Update domain to animeunity.nuovo - vX.Y.Z"
 git push origin main
 ```
 
@@ -108,7 +108,7 @@ git push origin main
 ## 5. TEST
 
 ```bash
-node test-module.js --mock         # offline: apostrofi, blocchi da 120, ordine, max 3 in parallelo, numeri decimali, stream, retry
+node test-module.js --mock         # offline: apostrofi, due risultati ita/jpn, blocchi da 120 con start, episodi per lingua, data-page, stream, retry
 node test-module.js "frieren"      # live
 node test-module.js "one piece"    # live, anime lungo
 ```
